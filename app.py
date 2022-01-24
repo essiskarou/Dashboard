@@ -12,6 +12,7 @@ import shap
 import dill
 from urllib.request import urlopen
 import requests
+import lime
 
 seuil = 0.5752224859896156
 
