@@ -15,7 +15,7 @@ import requests
 
 seuil = 0.5752224859896156
 
-PATH_PICKLE = '../P7_api/pickle/'
+PATH_PICKLE = 'pickle/'
 URL = "http://127.0.0.1"
 #API = "http://127.0.0.1:5000"
 ## addres pour l'api en ligne
