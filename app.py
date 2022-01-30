@@ -18,14 +18,19 @@ seuil = 0.52
 
 PATH_PICKLE = 'pickle/'
 URL = "http://127.0.0.1"
-#API = "http://127.0.0.1:5000"
 ## addres pour l'api en ligne
 API = "https://modele-de-scoring.herokuapp.com/"
+
+# Chargement des bases de données
 
 # chargemet de la base X
 X = pickle.load(open(PATH_PICKLE+'X.pickle', 'rb'))
 # chargemet de la base X_train
 X_train = pickle.load(open(PATH_PICKLE+'X_train.pickle', 'rb'))
+# chargemet de la base X_train
+X_test = pickle.load(open(PATH_PICKLE+'X_test_ind.pickle', 'rb'))
+# chargemet de la base X_train_ind
+X_train_ind = pickle.load(open(PATH_PICKLE+'X_train_ind.pickle', 'rb'))
 # chargemet du pickle du modèle
 model = pickle.load(open(PATH_PICKLE+'model.pkl', 'rb'))
 # chargement de la base train_2
@@ -34,10 +39,10 @@ variables = train_2.drop(columns=['index', 'SK_ID_CURR', 'TARGET'])
 variable_list = variables.columns
 id_client = train_2['SK_ID_CURR']
 df_id_client = pd.DataFrame(id_client)
-
-
 # chargemet de la base des voisins
 neighbors = pickle.load(open(PATH_PICKLE+'neighbors_predict_final.pickle', 'rb'))
+
+# Chargement de la configuration de la page
 
 st.markdown(
     """
@@ -89,6 +94,9 @@ st.markdown(
     """,
     unsafe_allow_html=True,
 )
+
+# Chargement des ID clients
+
 sb = st.sidebar
 with sb:
     st.image("./P7/pretadepenser.jpg")
@@ -140,6 +148,8 @@ else:
     raison = "Ce graphique donne plus de détails sur les raison d'octroi de prêt à ce client"
 
 
+# Chargement de de la charte de solvabilité
+
 with st.container():
     st.header(profit)
     st.subheader(texte)
@@ -168,21 +178,15 @@ with st.container():
     fig.update_layout(height=250)
     st.plotly_chart(fig, use_container_width=True)
 
+
+# Chargement des graphiques
+
 if (numclient != ""):
 
     col1, col2 = st.columns(2)
     col3, col4 = st.columns(2)
     col5, col6 = st.columns(2)
 
-
-    #response = urlopen(API + "/api/client/" + str(numclient))
-#
-    #data_json = json.loads(response.read())
-    #score = float(data_json["score"])
-    #proba0 = float(data_json["proba0"])
-    #seuil = float(data_json["seuil"])
-    #json = data_json["json"]
-    #neighbors = data_json["json_1"]
 
     mondf = pd.read_json(json)
     sb.dataframe(mondf.T, 1000, 500)
@@ -272,71 +276,95 @@ if (numclient != ""):
         st.set_option('deprecation.showPyplotGlobalUse', False)
         st.pyplot()
 #####################################
+    from sklearn.neighbors import NearestNeighbors
+    neigh = NearestNeighbors(n_neighbors=10)
+    neigh.fit(X_test)
+    idx_00 = neigh.kneighbors(X_train_ind[X_train_ind.index.isin([int(numclient)])],
+                              n_neighbors=10,
+                              return_distance=False).ravel()
+
+    list = X_test.iloc[idx_00].index
+    list_a = []
+    for i in list:
+        list_a.append(i)
+    neighbors = X_test[X_test.index.isin(list_a)]
+    neighbors = pd.DataFrame(neighbors.values)
+    neighbors.columns = X.columns
+    y_pred1 = model.predict_proba(neighbors.values)
+    y_pred2 = model.predict(neighbors.values)
+    y_pred2_df = pd.DataFrame(y_pred2)
+    neighbors_predict = neighbors.join(y_pred2_df, lsuffix='_caller', rsuffix='_other')
+    neighbors_predict = neighbors_predict.rename(columns={0: "Target_predict"})
+    list_a_df = pd.DataFrame(list_a)
+    list_a_df = list_a_df.rename(columns={0: "SK_ID_CURR"})
+    neighbors_predict_final = neighbors_predict.join(list_a_df, lsuffix='_caller', rsuffix='_other')
+    # neighbors_predict_final = neighbors_predict_final.set_index('SK_ID_CURR')
+    neighbors_predict_final['Target_predict'] = neighbors_predict_final['Target_predict'].astype(int)
+    #neighbors_predict_final = neighbors_predict_final.set_index(['SK_ID_CURR'])
+    print(neighbors_predict_final)
+#####################################
     with col5:
+
+        groupe_client = st.selectbox('choisir une variable', (variable_list))
         st.subheader("Positionnement du client " +(numclient) + " par rapport à un groupe de client similaire")
         st.text("Ce graphique compare les critères de notre client à d'autres clients qui lui sont similaires")
-        fig = sns.displot(neighbors[variable_explicative], color=color, kde=True, bins=100)
-        plt.axvline(x=list(train_2[variable_explicative].loc[train_2['SK_ID_CURR'] == int(numclient)])[0],
-        color='orange', label='Position du client')
+        fig = sns.displot(neighbors_predict_final[groupe_client], color=color, kde=True, bins=100)
+
+        #plt.axvline(x=list(train_2[variable_explicative].loc[train_2['SK_ID_CURR'] == int(numclient)])[0],
+        #color='orange', label='Position du client')
+        list_b = train_2[variable_explicative].loc[train_2['SK_ID_CURR'] == int(numclient)]
+        for i in list_b:
+            print(i)
+            plt.axvline(x=i,
+                        color='orange', label='Position du client')
+        #list_b
+        #print(list_b)
+
+        #plt.axvline(x=train_2[variable_explicative].loc[train_2['SK_ID_CURR'] == int(numclient)][0],
+                       #color='orange', label='Position du client')
 
         plt.legend(bbox_to_anchor=(1.05, 1), loc=2, borderaxespad=0., fontsize=18)
         st.set_option('deprecation.showPyplotGlobalUse', False)
         st.pyplot()
 ######################################
-
     with col6:
-        st.subheader("Positionnement du client " +(numclient) + " par rapport à un groupe de client similaire sur deux critères au choix")
-        st.text("Ce graphique compare deux critères de notre client à ceux d'autres clients qui lui sont similaires")
-        import plotly.express as px
-        first_variable = st.selectbox('choisir une première variable', (variable_list))
-        second_variable = st.selectbox('choisir une deuxième variable', (variable_list))
 
-        # Selections = st.multiselect('What are your favorite colors',
-        # variable_list,variable_list )
-        plt.figure(figsize=(10, 6))
-        plt.title("Distribution of %s" % "test")
+       st.subheader("Positionnement du client " +(numclient) + " par rapport à un groupe de client similaire sur deux critères au choix")
+       st.text("Ce graphique compare deux critères de notre client à ceux d'autres clients qui lui sont similaires")
+       import plotly.express as px
+       first_variable = st.selectbox('choisir une première variable', (variable_list))
+       second_variable = st.selectbox('choisir une deuxième variable', (variable_list))
 
-        # fig = sns.scatterplot(data=voisins_20, x='EXT_SOURCE_2', y='EXT_SOURCE_3', hue="predict_proba")
-        # fig = sns.scatterplot(data=train_2.loc[train_2['SK_ID_CURR'] == int(autre_clients)], x='EXT_SOURCE_2',
-        #                      y='EXT_SOURCE_3', color='cyan', s=150)
+       plt.figure(figsize=(10, 6))
+       plt.title("Distribution of %s" % "test")
 
-        import plotly.graph_objects as go
-
-        fig = go.Figure(layout=go.Layout(height=400, width=600))
-
-        # Add traces
-        # fig.add_trace(go.Scatter(x=groupes_clients['EXT_SOURCE_2'], y=groupes_clients['EXT_SOURCE_3'], mode='markers',name='predict_proba'))
-        fig.add_trace(
-            go.Scatter(x=neighbors[first_variable], y=neighbors[second_variable], mode='markers',
-                       name='1'))
-
-        fig.add_trace(
-            go.Scatter(x=train_2.loc[train_2['SK_ID_CURR'] == int(numclient)][first_variable],
-                       y=train_2.loc[train_2['SK_ID_CURR'] == int(numclient)][second_variable],
-                       mode='lines+markers', name='client',
-                       marker=dict(
-                           color='black',
-                           size=10,
-                           line=dict(
-                               color='yellow',
-                               width=5
-                           )
-                       )))
-
-        fig.update_layout(
-            #title="Comparaison à un groupe de clients similaires",
-            xaxis_title=first_variable,
-            yaxis_title=second_variable,
-            legend_title="Legend",
-            font=dict(
-                family="Courier New, monospace",
-                size=10,
-                color="RebeccaPurple"
-            ))
-
-        col6.plotly_chart(fig, use_container_width=True)
-        # fig.show()
-
-        plt.legend(bbox_to_anchor=(1.05, 1), loc=2, borderaxespad=0., fontsize=18)
-        st.set_option('deprecation.showPyplotGlobalUse', False)
-        # st.pyplot()
+       import plotly.graph_objects as go
+       fig = go.Figure(layout=go.Layout(height=400, width=600))
+       fig.add_trace(
+           go.Scatter(x=neighbors_predict_final[first_variable], y=neighbors_predict_final[second_variable], mode='markers',
+                      name='1'))
+       fig.add_trace(
+           go.Scatter(x=train_2.loc[train_2['SK_ID_CURR'] == int(numclient)][first_variable],
+                      y=train_2.loc[train_2['SK_ID_CURR'] == int(numclient)][second_variable],
+                      mode='lines+markers', name='client',
+                      marker=dict(
+                          color='black',
+                          size=10,
+                          line=dict(
+                              color='yellow',
+                              width=5
+                          )
+                      )))
+       fig.update_layout(
+           xaxis_title=first_variable,
+           yaxis_title=second_variable,
+           legend_title="Legend",
+           font=dict(
+               family="Courier New, monospace",
+               size=10,
+               color="RebeccaPurple"
+           ))
+       col6.plotly_chart(fig, use_container_width=True)
+       plt.legend(bbox_to_anchor=(1.05, 1), loc=2, borderaxespad=0., fontsize=18)
+       st.set_option('deprecation.showPyplotGlobalUse', False)
+       # st.pyplot()
